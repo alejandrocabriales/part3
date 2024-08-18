@@ -15,6 +15,7 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms :b
 app.use(express.static('dist'))
 
 
+
 app.get('/api/persons', (request, response) => {
   Person.find({}).then(result => {
   
@@ -22,24 +23,37 @@ app.get('/api/persons', (request, response) => {
   })
 })
 
-app.get('/api/persons/:id', (request, response) => {
-  Person.findById(request.params.id).then(note => {
-    response.json(note)
+app.get('/api/persons/:id', (request, response, next) => {
+  Person.findById(request.params.id).then(person => {
+    
+      if (person) {
+        response.json(person)
+      } else {
+        response.status(404).end()
+      }
+    })
+    .catch(error => next(error))
+})
+
+app.get('/api/info', (request, response) => {
+  Person.find({}).then(result => {
+
+    const phonebook = result.map(person => person.name)
+    response.send(`<p>Phonebook has info for ${phonebook.length} people</p>
+      <p>${new Date()}</p>`)
   })
+ 
 })
 
 
-
-app.post('/api/persons', (request, response) => {
+  app.post('/api/persons', (request, response) => {
     const body = request.body
-    if (!body.name || !body.number) {
+    if (!body.name) {
         return response
             .status(400)
             .json({error: 'content missing'})
     }
-
-  
-    Person.find({name:body.name}).then(result => {
+       Person.find({name:body.name}).then(result => {
         if(result.length>0){
             return response
             .status(400)
@@ -53,17 +67,53 @@ app.post('/api/persons', (request, response) => {
               response.json(person)
           })
       })
-    })
+    }); 
     
+    
+app.put('/api/persons/:id', (request, response, next) => {
+      const body = request.body
+    
+      const person = {
+        name: body.name,
+        phone: body.number,
+      }
+    
+      Person.findByIdAndUpdate(request.params.id, person)
+        .then(result => {
+          console.log('result',result)
+          response.json(result)
+        })
+        .catch(error => next(error))
+    })
+
+
+
 app.delete('/api/persons/:id', (request, response) => {
-   const phonebook = Person.findById(request.params.id)
-   phonebook.deleteOne().then((result) => {
-    response
-        .status(204)
-        .json(result)
-        .end()
-   })
+  Person.findByIdAndDelete(request.params.id).then((result) => {
+    if(result){
+      response
+      .status(200)
+      .json(result)
+      .end()
+    } else {
+      response
+      .status(404)
+      .end()
+    }  
 })
+.catch(error => next(error))
+})
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' })
+  } 
+
+  next(error)
+}
+app.use(errorHandler)
+
 
 
 const PORT = process.env.PORT || 3001
